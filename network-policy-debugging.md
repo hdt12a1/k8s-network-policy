@@ -11,6 +11,7 @@ This guide provides comprehensive steps and tools for debugging Network Policies
 - [Checking Network Plugin (CNI) in EKS](#checking-network-plugin-cni-in-eks)
 - [Network Policy Logging and Traffic Analysis](#network-policy-logging-and-traffic-analysis)
 - [AWS VPC CNI Network Policy Debugging](#aws-vpc-cni-network-policy-debugging)
+- [Finding AWS S3 CIDR Ranges](#finding-aws-s3-cidr-ranges)
 
 ## Common Issues
 
@@ -395,6 +396,114 @@ Enable VPC Flow Logs in your AWS Console to see accepted/rejected traffic at the
    - Check node instance limits
    - Verify IAM roles have necessary permissions
    - Monitor CloudWatch metrics for CNI errors
+
+## Finding AWS S3 CIDR Ranges
+
+There are several methods to find S3 CIDR ranges for your network policies:
+
+### Method 1: Using AWS IP Ranges API
+
+```bash
+# Download the latest IP ranges
+curl -o ip-ranges.json https://ip-ranges.amazonaws.com/ip-ranges.json
+
+# Filter for S3 IPs in your region (example for ap-southeast-1)
+jq '.prefixes[] | select(.service=="S3" and .region=="ap-southeast-1") | .ip_prefix' ip-ranges.json
+
+# For IPv6
+jq '.ipv6_prefixes[] | select(.service=="S3" and .region=="ap-southeast-1") | .ipv6_prefix' ip-ranges.json
+```
+
+### Method 2: Using AWS CLI
+
+```bash
+# Get S3 IP ranges for your region
+aws ec2 describe-prefix-lists \
+  --filters "Name=prefix-list-name,Values=com.amazonaws.*.s3" \
+  --region <your-region>
+```
+
+### Method 3: DNS Resolution
+
+```bash
+# Resolve S3 endpoint DNS
+dig +short s3.amazonaws.com
+dig +short s3.<region>.amazonaws.com
+
+# For specific bucket
+dig +short <bucket-name>.s3.<region>.amazonaws.com
+```
+
+### Best Practices for S3 CIDR Management
+
+1. **Regular Updates**:
+   - IP ranges can change
+   - Set up automated updates
+   - Monitor AWS IP range announcements
+
+2. **Regional Considerations**:
+   - Use region-specific endpoints
+   - Consider cross-region access
+   - Check transfer costs
+
+3. **VPC Endpoint Alternative**:
+   - More secure than CIDR ranges
+   - No need to manage IP ranges
+   - Better for production use
+
+### Example Network Policy with Multiple Regions
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-s3-multi-region
+spec:
+  podSelector:
+    matchLabels:
+      app: your-app
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 52.219.0.0/16    # Example S3 CIDR for region 1
+        - ipBlock:
+            cidr: 3.5.164.0/22     # Example S3 CIDR for region 2
+      ports:
+        - protocol: TCP
+          port: 443
+```
+
+### Troubleshooting S3 CIDR Issues
+
+1. **Verify IP Ranges**:
+   ```bash
+   # Test connection to S3
+   curl -v https://s3.<region>.amazonaws.com
+   
+   # Check if IP is in range
+   whois <ip-address> | grep "CIDR"
+   ```
+
+2. **DNS Resolution**:
+   ```bash
+   # Check DNS resolution
+   nslookup s3.<region>.amazonaws.com
+   
+   # Verify IPv4/IPv6
+   dig A s3.<region>.amazonaws.com
+   dig AAAA s3.<region>.amazonaws.com
+   ```
+
+3. **Network Connectivity**:
+   ```bash
+   # Test HTTPS connectivity
+   nc -zv s3.<region>.amazonaws.com 443
+   
+   # Trace route
+   traceroute s3.<region>.amazonaws.com
+   ```
 
 ## Checking Network Plugin (CNI) in EKS
 

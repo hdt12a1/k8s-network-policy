@@ -201,3 +201,76 @@ spec:
     ports:
     - protocol: TCP
       port: 80            # HTTP traffic
+
+---
+# Network Policy for AWS S3 Access
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-s3-access
+  namespace: your-namespace
+spec:
+  podSelector:
+    matchLabels:
+      app: your-app  # Match your application pods
+  policyTypes:
+    - Egress
+  egress:
+    # Allow HTTPS access to S3 endpoints
+    - to:
+        - ipBlock:
+            # S3 CIDR ranges for your AWS region
+            # Replace with actual CIDR ranges for your region
+            cidr: 3.5.140.0/22   # Example S3 CIDR for ap-southeast-1
+      ports:
+        - protocol: TCP
+          port: 443    # HTTPS
+    # Allow DNS resolution
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+        - podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53     # DNS
+        - protocol: TCP
+          port: 53     # DNS
+
+---
+# Alternative Network Policy using VPC Endpoints
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-s3-vpc-endpoint
+  namespace: your-namespace
+spec:
+  podSelector:
+    matchLabels:
+      app: your-app
+  policyTypes:
+    - Egress
+  egress:
+    # Allow HTTPS access to VPC Endpoint
+    - to:
+        - ipBlock:
+            # Your VPC Endpoint CIDR
+            cidr: 10.0.0.0/16    # Replace with your VPC CIDR
+      ports:
+        - protocol: TCP
+          port: 443
+    # Allow DNS resolution
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+        - podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
